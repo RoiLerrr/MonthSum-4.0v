@@ -32,7 +32,7 @@ const App: React.FC = () => {
       setData(parsed);
       setView('dashboard');
     } else {
-      alert("No valid data found. Please check your input format. Ensure dates are in YYYY-MM-DD format.");
+      alert("No valid data found. Please paste the full platform export including headers.");
     }
   };
 
@@ -124,7 +124,6 @@ const App: React.FC = () => {
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-10">
-        {/* Summary Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
           <SummaryCard 
             title="Total Ad Spend" 
@@ -154,7 +153,6 @@ const App: React.FC = () => {
           />
         </div>
 
-        {/* Main Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
           <TrendsChart 
             data={data} 
@@ -168,7 +166,6 @@ const App: React.FC = () => {
           />
         </div>
 
-        {/* Platform Breakdown Table */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center">
             <h3 className="text-xl font-bold text-slate-800">Platform Performance</h3>

@@ -5,72 +5,77 @@ export const parseMarketingData = (rawText: string): DailyDataPoint[] => {
   const lines = rawText.split('\n');
   const results: DailyDataPoint[] = [];
   let currentPlatform: Platform = 'Other';
+  
+  // Fixed conversion rate for TikTok USD to ILS (common for Israeli marketers)
+  const USD_TO_ILS = 3.7;
 
   lines.forEach((line) => {
     const trimmed = line.trim();
     if (!trimmed) return;
 
-    // Detect Platform headers
-    if (trimmed.includes('FACEBOOK')) {
+    // Detect Platform headers and switch context
+    if (trimmed.includes('Amount Spent (ILS)') && trimmed.includes('Leads')) {
       currentPlatform = 'Facebook';
       return;
-    } else if (trimmed.includes('TIKTOK')) {
+    } else if (trimmed.includes('Cost (USD)') && trimmed.includes('Conversions')) {
       currentPlatform = 'TikTok';
       return;
-    } else if (trimmed.includes('GOOGLE PMAX')) {
-      currentPlatform = 'Google PMax';
-      return;
-    } else if (trimmed.includes('GOOGLE SEARCH')) {
-      currentPlatform = 'Google Search';
+    } else if (trimmed.includes('Avg CPC') && trimmed.includes('Cost') && trimmed.includes('Conversions')) {
+      // Headers for Google exports are similar, differentiation happens at row level
+      currentPlatform = 'Other'; 
       return;
     }
 
-    // Split line by tabs (common in spreadsheet copies)
+    // Split line by tabs
     const parts = line.split('\t').map(p => p.trim());
     
-    // Find a date (YYYY-MM-DD format)
-    const dateIndex = parts.findIndex(p => /^\d{4}-\d{2}-\d{2}$/.test(p));
-    if (dateIndex === -1) return;
-
-    const date = parts[dateIndex];
-
     try {
+      let date = '';
       let spend = 0;
       let conversions = 0;
+      let platformOverride: Platform | null = null;
 
-      switch (currentPlatform) {
-        case 'Facebook':
-          // Day Reach Impressions Frequency Currency Amount spent (ILS) Leads
-          // Parts look like: ["", date, reach, imps, freq, curr, spend, leads, cost]
-          spend = parseFloat(parts[6]?.replace(/,/g, '') || '0');
-          conversions = parseFloat(parts[7]?.replace(/,/g, '') || '0');
-          break;
-
-        case 'TikTok':
-          // Day | Cost USD | CPC | Impressions | CTR | Clicks | Cost/Conv | CVR | Conversions
-          spend = parseFloat(parts[2]?.replace(/,/g, '') || '0');
-          conversions = parseFloat(parts[9]?.replace(/,/g, '') || '0');
-          break;
-
-        case 'Google PMax':
-          // קמפיין | יום | קליקים | חשיפות | שיעור קליקים | עלות ממוצעת | מחיר | המרות
-          spend = parseFloat(parts[7]?.replace(/,/g, '') || '0');
-          conversions = parseFloat(parts[8]?.replace(/,/g, '') || '0');
-          break;
-
-        case 'Google Search':
-          // קמפיין | יום | קליקים | חשיפות | שיעור קליקים | עלות ממוצעת | מחיר | המרות
-          spend = parseFloat(parts[7]?.replace(/,/g, '') || '0');
-          conversions = parseFloat(parts[8]?.replace(/,/g, '') || '0');
-          break;
+      // Check for Facebook rows
+      // Format: Platform (0), Day (1), ..., Amount Spent (6), Leads (7)
+      if (parts[0] === 'Facebook') {
+        if (parts[1] === 'All') return; // Skip total row
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(parts[1])) return;
+        
+        date = parts[1];
+        spend = parseFloat(parts[6]?.replace(/,/g, '') || '0');
+        conversions = parseFloat(parts[7]?.replace(/,/g, '') || '0');
+        platformOverride = 'Facebook';
+      } 
+      // Check for TikTok rows
+      // Format: Date (0), Cost USD (1), ..., Conversions (8)
+      else if (/^\d{4}-\d{2}-\d{2}$/.test(parts[0]) && parts.length >= 9 && !isNaN(parseFloat(parts[1]))) {
+        date = parts[0];
+        // Convert USD to ILS for TikTok
+        spend = parseFloat(parts[1]?.replace(/,/g, '') || '0') * USD_TO_ILS;
+        conversions = parseFloat(parts[8]?.replace(/,/g, '') || '0');
+        platformOverride = 'TikTok';
+      }
+      // Check for Google rows (PMax or Search)
+      // Format: Campaign (0), Date (1), ..., Cost (6), Conversions (7)
+      else if (/^\d{4}-\d{2}-\d{2}$/.test(parts[1]) && parts.length >= 8) {
+        date = parts[1];
+        spend = parseFloat(parts[6]?.replace(/,/g, '') || '0');
+        conversions = parseFloat(parts[7]?.replace(/,/g, '') || '0');
+        
+        const campaignName = parts[0].toUpperCase();
+        if (campaignName.includes('PMAX')) {
+          platformOverride = 'Google PMax';
+        } else if (campaignName.includes('SEARCH')) {
+          platformOverride = 'Google Search';
+        }
       }
 
-      if (!isNaN(spend) && !isNaN(conversions)) {
+      if (date && !isNaN(spend) && platformOverride) {
         results.push({
           date,
           spend,
           conversions,
-          platform: currentPlatform
+          platform: platformOverride
         });
       }
     } catch (err) {
